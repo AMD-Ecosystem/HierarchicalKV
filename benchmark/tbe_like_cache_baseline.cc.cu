@@ -558,9 +558,9 @@ __global__ void admission_stage_kernel(
         evicted_keys[pos] = cache_keys[victim];
       }
     }
-    victim = __shfl_sync(0xffffffff, victim, 0);
-    existing_slot = __shfl_sync(0xffffffff, existing_slot, 0);
-    was_valid = __shfl_sync(0xffffffff, was_valid, 0);
+    victim = __shfl_sync(nv::merlin::kFullWarpMask, victim, 0);
+    existing_slot = __shfl_sync(nv::merlin::kFullWarpMask, existing_slot, 0);
+    was_valid = __shfl_sync(nv::merlin::kFullWarpMask, was_valid, 0);
     __syncwarp();
     for (int dim = lane; dim < value_dim; dim += warpSize) {
       size_t cache_idx = static_cast<size_t>(victim) * value_dim + dim;

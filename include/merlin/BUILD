@@ -5,6 +5,7 @@ cuda_cc_library(
     srcs = [
     ],
     hdrs = [
+        "hip_compat.cuh",
         "types.cuh",
         "utils.cuh",
     ],

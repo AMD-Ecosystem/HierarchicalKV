@@ -58,7 +58,7 @@ __global__ void tlp_update_values_kernel_with_io(
   } else {
     return;
   }
-  const unsigned int active_warp_mask = __ballot_sync(0xffffffff, true);
+  const warp_mask_t active_warp_mask = warp_ballot(kFullWarpMask, true);
   bool retry_needed = false;
   bool scan_complete = false;
 
@@ -132,8 +132,8 @@ __global__ void tlp_update_values_kernel_with_io(
     }
   }
   if (!retry_needed) return;
-  __syncwarp(active_warp_mask);
-  const unsigned int retry_warp_mask = __ballot_sync(active_warp_mask, true);
+  warp_sync(active_warp_mask);
+  const warp_mask_t retry_warp_mask = warp_ballot(active_warp_mask, true);
   bool completed = false;
   do {
     if (!completed) {
@@ -159,7 +159,7 @@ __global__ void tlp_update_values_kernel_with_io(
       }
       completed |= !has_locked_keys;
     }
-  } while (__any_sync(retry_warp_mask, !completed));
+  } while (warp_any(retry_warp_mask, !completed));
 }
 template <typename K = uint64_t, typename V = byte4, typename S = uint64_t,
           typename VecV = byte16, uint32_t BLOCK_SIZE = 128,
@@ -203,8 +203,8 @@ __global__ void pipeline_update_values_kernel_with_io(
   int groupID = threadIdx.x / GROUP_SIZE;
   int rank = g.thread_rank();
   uint64_t key_idx_base = (blockIdx.x * blockDim.x) + groupID * GROUP_SIZE;
-  const unsigned int active_warp_mask =
-      __ballot_sync(0xffffffff, key_idx_base < n);
+  const warp_mask_t active_warp_mask =
+      warp_ballot(kFullWarpMask, key_idx_base < n);
   if (key_idx_base >= n) return;
   int loop_num =
       (n - key_idx_base) < GROUP_SIZE ? (n - key_idx_base) : GROUP_SIZE;
@@ -542,7 +542,7 @@ __global__ void pipeline_update_values_kernel_with_io(
   }
   g.sync();
 
-  __syncwarp(active_warp_mask);
+  warp_sync(active_warp_mask);
   while (retry_mask != 0) {
     const int retry_index = __ffs(retry_mask) - 1;
     const int retry_key_idx = groupID * GROUP_SIZE + retry_index;
@@ -564,7 +564,7 @@ __global__ void pipeline_update_values_kernel_with_io(
           }
           has_locked_keys |= possible_key == static_cast<K>(LOCKED_KEY);
         }
-        const auto found_vote = g.ballot(possible_pos >= 0);
+        const unsigned int found_vote = g.ballot(possible_pos >= 0);
         if (found_vote) {
           retry_pos = g.shfl(possible_pos, __ffs(found_vote) - 1);
         }

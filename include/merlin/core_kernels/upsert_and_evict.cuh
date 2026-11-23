@@ -1556,7 +1556,8 @@ struct KernelSelector_UpsertAndEvict {
     constexpr uint32_t MinBucketCap = sizeof(VecD_Load) / sizeof(D);
     if (!unique_key || bucket_size < MinBucketCap) return false;
     uint32_t value_size = dim * sizeof(V);
-#if defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)
+#if (defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)) || \
+    defined(MERLIN_HIP)
     if (value_size <= ValueConfig::size_tlp_v2) return true;
 #else
     if (value_size <= ValueConfig::size_tlp_v1) return true;
@@ -1595,7 +1596,8 @@ struct KernelSelector_UpsertAndEvict {
       }
     };
 
-#if defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)
+#if (defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)) || \
+    defined(MERLIN_HIP)
     auto launch_TLPv2 = [&]() {
       if (total_value_size % sizeof(byte16) == 0) {
         using VecV = byte16;
@@ -1650,7 +1652,8 @@ struct KernelSelector_UpsertAndEvict {
       if (total_value_size <= ValueConfig::size_tlp_v1) {
         launch_TLPv1();
       } else {
-#if defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)
+#if (defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)) || \
+    defined(MERLIN_HIP)
         launch_TLPv2();
 #else
         launch_TLPv1();
@@ -1665,7 +1668,8 @@ struct KernelSelector_UpsertAndEvict {
         }
       } else if (total_value_size <= ValueConfig::size_tlp_v2) {
         if (params.load_factor <= 0.85f) {
-#if defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)
+#if (defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)) || \
+    defined(MERLIN_HIP)
           launch_TLPv2();
 #else
           launch_Pipeline();

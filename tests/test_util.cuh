@@ -47,9 +47,13 @@ namespace test_util {
 
 template <class S>
 __global__ void host_nano_kernel(S* d_clk) {
+#ifdef MERLIN_HIP
+  *d_clk = nv::merlin::device_nano<S>();
+#else
   S mclk;
   asm volatile("mov.u64 %0,%%globaltimer;" : "=l"(mclk));
   *d_clk = mclk;
+#endif
 }
 
 template <class S>

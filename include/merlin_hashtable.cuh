@@ -21,7 +21,10 @@
 #include <thrust/sort.h>
 #include <atomic>
 #include <cstdint>
+#include "merlin/hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cub/cub.cuh>
+#endif
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -187,7 +190,9 @@ using EraseIfPredict = bool (*)(
     const S& threshold  ///< The threshold to compare with the `score` argument.
 );
 
-#if THRUST_VERSION >= 101600
+#if defined(MERLIN_HIP)
+static constexpr auto& thrust_par = thrust::hip::par_nosync;
+#elif THRUST_VERSION >= 101600
 static constexpr auto& thrust_par = thrust::cuda::par_nosync;
 #else
 static constexpr auto& thrust_par = thrust::cuda::par;
@@ -1204,7 +1209,8 @@ class HashTable : public HashTableBase<K, V, S> {
           n == 0 || (keys != nullptr && values != nullptr && scores != nullptr),
           "[UPSERT_OUTCOMES] Nonempty batches require keys, values and "
           "scores.");
-#if defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)
+#if (defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)) || \
+    defined(MERLIN_HIP)
       using OutcomeSelector =
           KernelSelector_Upsert<key_type, value_type, score_type,
                                 evict_strategy_, ArchTag>;

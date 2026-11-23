@@ -243,9 +243,13 @@ void array2ptr(V** ptr, V* __restrict array, const size_t dim, size_t n,
 
 template <class S>
 __global__ void host_nano_kernel(S* d_clk) {
+#ifdef MERLIN_HIP
+  *d_clk = nv::merlin::device_nano<S>();
+#else
   S mclk;
   asm volatile("mov.u64 %0,%%globaltimer;" : "=l"(mclk));
   *d_clk = mclk;
+#endif
 }
 
 template <class S>

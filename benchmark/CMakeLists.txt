@@ -22,6 +22,11 @@ set(HKV_REPRO_SOURCES
   tbe_like_cache_baseline
 )
 
+if(HKV_USE_HIP)
+  file(GLOB hkv_repro_hip_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.cc.cu)
+  set_source_files_properties(${hkv_repro_hip_sources} PROPERTIES LANGUAGE HIP)
+endif()
+
 foreach(name IN LISTS HKV_REPRO_SOURCES)
   add_executable(${name} ${name}.cc.cu)
   target_compile_features(${name} PRIVATE cxx_std_17)
@@ -79,5 +84,5 @@ set_target_properties(concurrency_rw_lock PROPERTIES
 # Keep optional benchmark host code optimized without changing the tests' flags.
 foreach(name IN ITEMS ${HKV_REPRO_SOURCES}
     digest_ablation_no_digest concurrency_rw_lock)
-  target_compile_options(${name} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3>)
+  target_compile_options(${name} PRIVATE $<$<COMPILE_LANGUAGE:CUDA,HIP>:-O3>)
 endforeach()

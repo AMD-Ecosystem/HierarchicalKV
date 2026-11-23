@@ -19,7 +19,10 @@
 #include <stddef.h>
 #include <cstdint>
 #include <cuda/atomic>
+#include "hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cuda/std/semaphore>
+#endif
 #include "debug.hpp"
 
 namespace nv {

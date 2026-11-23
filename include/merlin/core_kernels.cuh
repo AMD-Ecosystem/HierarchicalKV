@@ -17,7 +17,10 @@
 #pragma once
 
 #include <cstdint>
+#include "hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cub/cub.cuh>
+#endif
 #include <cuda/std/functional>
 #include "allocator.cuh"
 #include "core_kernels/accum_or_assign.cuh"
@@ -225,7 +228,8 @@ void initialize_buckets(Table<K, V, S>** table, BaseAllocator* allocator,
         V* h_ptr =
             (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
         V* address = nullptr;
-        CUDA_CHECK(cudaHostGetDevicePointer(&address, h_ptr, 0));
+        CUDA_CHECK(cudaHostGetDevicePointer(reinterpret_cast<void**>(&address),
+                                            h_ptr, 0));
         size_t index = start + num_of_allocated_buckets + j;
         allocate_bucket_vectors<K, V, S>
             <<<1, 1>>>((*table)->buckets, index, address);

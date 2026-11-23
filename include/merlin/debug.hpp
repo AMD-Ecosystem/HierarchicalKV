@@ -16,7 +16,10 @@
 
 #pragma once
 
+#include "hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cuda_runtime_api.h>
+#endif
 #include <sstream>
 #include <stdexcept>
 #include <string>

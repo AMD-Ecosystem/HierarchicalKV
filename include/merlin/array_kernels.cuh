@@ -16,8 +16,11 @@
 
 #pragma once
 
+#include "hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cooperative_groups.h>
 #include "cuda_runtime.h"
+#endif
 #include "thrust/device_vector.h"
 #include "thrust/execution_policy.h"
 #include "thrust/scan.h"
@@ -108,7 +111,9 @@ void gpu_boolean_mask(size_t grid_size, size_t block_size, const bool* masks,
   size_t n_offsets = (n + TILE_SIZE - 1) / TILE_SIZE;
   gpu_cell_count<Tidx, TILE_SIZE>
       <<<grid_size, block_size, 0, stream>>>(masks, offsets, n, n_evicted);
-#if THRUST_VERSION >= 101600
+#if defined(MERLIN_HIP)
+  auto policy = thrust::hip::par_nosync.on(stream);
+#elif THRUST_VERSION >= 101600
   auto policy = thrust::cuda::par_nosync.on(stream);
 #else
   auto policy = thrust::cuda::par.on(stream);

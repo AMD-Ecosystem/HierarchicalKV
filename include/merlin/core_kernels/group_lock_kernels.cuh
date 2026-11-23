@@ -16,7 +16,10 @@
 
 #pragma once
 #include <cuda/atomic>
+#include "../hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cuda/std/semaphore>
+#endif
 
 namespace nv {
 namespace merlin {

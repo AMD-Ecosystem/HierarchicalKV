@@ -16,25 +16,33 @@
 
 #pragma once
 
+#include "hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cooperative_groups.h>
+#endif
 #include <stdarg.h>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <string>
+#ifndef MERLIN_HIP
 #include "cuda_fp16.h"
+#endif
 #include "debug.hpp"
 
 using namespace cooperative_groups;
 namespace cg = cooperative_groups;
 
+// HIP already defines this overload for uint64_t.
+#ifndef MERLIN_HIP
 __inline__ __device__ uint64_t atomicCAS(uint64_t* address, uint64_t compare,
                                          uint64_t val) {
   return (uint64_t)atomicCAS((unsigned long long*)address,
                              (unsigned long long)compare,
                              (unsigned long long)val);
 }
+#endif
 
 __inline__ __device__ int64_t atomicCAS(int64_t* address, int64_t compare,
                                         int64_t val) {
@@ -43,10 +51,13 @@ __inline__ __device__ int64_t atomicCAS(int64_t* address, int64_t compare,
                             (unsigned long long)val);
 }
 
+// HIP already defines this overload for uint64_t.
+#ifndef MERLIN_HIP
 __inline__ __device__ uint64_t atomicExch(uint64_t* address, uint64_t val) {
   return (uint64_t)atomicExch((unsigned long long*)address,
                               (unsigned long long)val);
 }
+#endif
 
 __inline__ __device__ int64_t atomicExch(int64_t* address, int64_t val) {
   return (int64_t)atomicExch((unsigned long long*)address,
@@ -64,19 +75,26 @@ __inline__ __device__ int64_t atomicAdd(int64_t* address, const int64_t val) {
   return (int64_t)atomicAdd((unsigned long long*)address, val);
 }
 
+// HIP already defines this overload for uint64_t.
+#ifndef MERLIN_HIP
 __inline__ __device__ uint64_t atomicAdd(uint64_t* address,
                                          const uint64_t val) {
   return (uint64_t)atomicAdd((unsigned long long*)address, val);
 }
+#endif
 
 namespace nv {
 namespace merlin {
 
 template <class S>
 static __forceinline__ __device__ S device_nano() {
+#ifdef MERLIN_HIP
+  return global_timer_ns<S>();
+#else
   S mclk;
   asm volatile("mov.u64 %0,%%globaltimer;" : "=l"(mclk));
   return mclk;
+#endif
 }
 
 inline void __cudaCheckError(const char* file, const int line) {
@@ -301,7 +319,7 @@ static inline int get_dev(const void* ptr) {
   CUDA_CHECK(cudaPointerGetAttributes(&attr, ptr));
   int dev = -1;
 
-#if CUDART_VERSION >= 10000
+#if CUDART_VERSION >= 10000 || defined(MERLIN_HIP)
   if (attr.type == cudaMemoryTypeDevice)
 #else
   if (attr.memoryType == cudaMemoryTypeDevice)
@@ -323,7 +341,7 @@ static inline bool is_on_device(const void* ptr) {
   cudaPointerAttributes attr;
   CUDA_CHECK(cudaPointerGetAttributes(&attr, ptr));
 
-#if CUDART_VERSION >= 10000
+#if CUDART_VERSION >= 10000 || defined(MERLIN_HIP)
   return (attr.type == cudaMemoryTypeDevice);
 #else
   return (attr.memoryType == cudaMemoryTypeDevice);

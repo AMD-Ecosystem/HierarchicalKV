@@ -18,6 +18,8 @@ cmake -S . -B build-repro -Dsm=90 -DCMAKE_BUILD_TYPE=Release \
 cmake --build build-repro --target hkv_lookup_modes_benchmark
 ```
 
+On AMD GPUs, configure with `-DHKV_USE_HIP=ON -DCMAKE_HIP_ARCHITECTURES=gfx942 -DCMAKE_PREFIX_PATH=/opt/rocm` in place of `-Dsm=90`.
+
 `benchmark/CMakeLists.txt` keeps digest and R/W-lock ablation definitions
 target-local (`digest_ablation_no_digest`, `concurrency_rw_lock`) rather than
 altering every library/test build. `HKV_REPRO_*` cache options apply only to

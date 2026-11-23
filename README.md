@@ -188,6 +188,8 @@ Your environment must meet the following requirements:
 - GCC supports `C++17' standard or later.
 - Bazel version >= 3.7.2 (Bazel compile only)
 
+On AMD GPUs the library builds with HIP and needs ROCm with hipCUB, rocThrust and libhipcxx (tested with ROCm 10.2 on an AMD Instinct MI300X).
+
 ### with cmake
 ```shell
 git clone --recursive https://github.com/NVIDIA-Merlin/HierarchicalKV.git
@@ -209,6 +211,16 @@ For Unit Test:
 ```shell
 ./merlin_hashtable_test
 ```
+
+### with cmake for AMD GPUs (ROCm)
+```shell
+git clone --recursive https://github.com/NVIDIA-Merlin/HierarchicalKV.git
+cd HierarchicalKV
+cmake -S . -B build -DHKV_USE_HIP=ON -DCMAKE_HIP_ARCHITECTURES=gfx942 -DCMAKE_PREFIX_PATH=/opt/rocm
+cmake --build build -j
+```
+
+`CMAKE_HIP_ARCHITECTURES` lists the AMD GPU targets, for example `gfx942` for MI300 or `gfx1100` for Radeon RX 7900; without it CMake builds for the GPUs it finds. `CMAKE_PREFIX_PATH` is the ROCm installation (for a pip-installed ROCm SDK, the output of `rocm-sdk path --root`). The tests and benchmarks run as on CUDA. A project that uses the headers compiles them as HIP with the hipCUB, rocThrust and libhipcxx include directories, for example by linking the `hip::hipcub`, `roc::rocthrust` and `libhipcxx::libhipcxx` CMake targets.
 
 ### with bazel
 

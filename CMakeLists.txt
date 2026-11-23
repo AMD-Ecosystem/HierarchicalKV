@@ -14,8 +14,22 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.10)
+option(HKV_USE_HIP "Build for AMD GPUs with ROCm" OFF)
+if(HKV_USE_HIP)
+  cmake_minimum_required(VERSION 3.21)
+  project(merlin-hkvs LANGUAGES CXX HIP)
+  find_package(hip REQUIRED)
+  find_package(hipcub REQUIRED)
+  find_package(rocthrust REQUIRED)
+  find_package(libhipcxx REQUIRED)
+  set(CMAKE_HIP_STANDARD 17)
+  # nvcc optimizes device code in Debug builds; keep the HIP device code
+  # optimized too while leaving assertions enabled.
+  set(CMAKE_HIP_FLAGS_DEBUG "${CMAKE_HIP_FLAGS_DEBUG} -O3")
+else()
 project(merlin-hkvs LANGUAGES CXX CUDA)
 find_package(CUDAToolkit)
+endif()
 
 # TODO(Q3): target_compile_features below still declare cxx_std_14, which is
 # inconsistent with the project-level C++17.  Update them to cxx_std_17 (or
@@ -56,6 +70,7 @@ endif()
 set(CUDA_SEPARABLE_COMPILATION ON)
 
 # Select target CUDA binary architecture.
+if(NOT HKV_USE_HIP)
 foreach(cuda_arch ${sm})
   list(APPEND cuda_arch_list ${cuda_arch})
   message(STATUS "Assign GPU architecture (sm=${cuda_arch})")
@@ -77,6 +92,7 @@ foreach(cuda_arch ${cuda_arch_list})
 endforeach()
 
 message(CMAKE_CUDA_FLAGS="${CMAKE_CUDA_FLAGS}")
+endif()
 
 include_directories(
   ${PROJECT_SOURCE_DIR}/include
@@ -84,6 +100,15 @@ include_directories(
 )
 
 ADD_SUBDIRECTORY(tests/googletest)
+
+if(HKV_USE_HIP)
+  # The tests and benchmarks keep their CUDA sources and build them as HIP.
+  file(GLOB hkv_hip_sources ${PROJECT_SOURCE_DIR}/tests/*.cc.cu
+    ${PROJECT_SOURCE_DIR}/benchmark/*.cc.cu)
+  set_source_files_properties(${hkv_hip_sources} PROPERTIES LANGUAGE HIP)
+  link_libraries(hip::hipcub roc::rocthrust libhipcxx::libhipcxx)
+  include_directories(BEFORE ${PROJECT_SOURCE_DIR}/tests/hip_compat)
+endif()
 
 link_directories(
 )

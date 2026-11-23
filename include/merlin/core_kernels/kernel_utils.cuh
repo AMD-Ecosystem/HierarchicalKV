@@ -16,10 +16,13 @@
 
 #pragma once
 
+#include "../hip_compat.cuh"
+#ifndef MERLIN_HIP
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 #include <cuda_pipeline.h>
 #include <cuda/barrier>
+#endif
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -84,7 +87,7 @@ __forceinline__ __device__ void copy_bucket_scores(S* destination,
 }
 
 template <typename T>
-__forceinline__ __device__ T* __shfl_sync_ptr(uint32_t mask, T* var,
+__forceinline__ __device__ T* __shfl_sync_ptr(warp_mask_t mask, T* var,
                                               int srcLane,
                                               int width = warpSize) {
   uint64_t var64 = reinterpret_cast<uint64_t>(var);
