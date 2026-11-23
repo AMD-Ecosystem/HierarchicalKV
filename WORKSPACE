@@ -2,6 +2,7 @@ workspace(name = "HierarchicalKV")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//build_deps/gpus:configure.bzl", "cuda_configure")
+load("//build_deps/gpus:rocm_configure.bzl", "rocm_configure")
 
 http_archive(
     name = "bazel_skylib",
@@ -12,3 +13,5 @@ http_archive(
 )
 
 cuda_configure(name = "local_config_cuda")
+
+rocm_configure(name = "local_config_rocm")

@@ -824,8 +824,40 @@ def _basename(repository_ctx, path_str):
             return path_str[r_i + 1:]
     return path_str
 
+_ROCM_FORWARDING_BUILD = """
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "cuda",
+    actual = "@local_config_rocm//rocm",
+)
+"""
+
+_ROCM_FORWARDING_BUILD_DEFS = """
+load(
+    "@local_config_rocm//rocm:build_defs.bzl",
+    _cuda_cc_binary = "cuda_cc_binary",
+    _cuda_cc_library = "cuda_cc_library",
+    _cuda_cc_test = "cuda_cc_test",
+    _cuda_header_library = "cuda_header_library",
+)
+
+cuda_cc_binary = _cuda_cc_binary
+cuda_cc_library = _cuda_cc_library
+cuda_cc_test = _cuda_cc_test
+cuda_header_library = _cuda_header_library
+"""
+
+def _create_rocm_forwarding_repository(repository_ctx):
+    """Points the CUDA targets and macros at @local_config_rocm."""
+    repository_ctx.file("cuda/BUILD", _ROCM_FORWARDING_BUILD)
+    repository_ctx.file("cuda/build_defs.bzl", _ROCM_FORWARDING_BUILD_DEFS)
+
 def _create_local_cuda_repository(repository_ctx):
     """Creates the repository containing files set up to build with CUDA."""
+    if get_host_environ(repository_ctx, "NEED_ROCM") == "1":
+        _create_rocm_forwarding_repository(repository_ctx)
+        return
     tpl_paths = {
         filename: _tpl_path(repository_ctx, filename)
         for filename in [
@@ -1290,6 +1322,7 @@ _CUDA_ENVIRONS = [
     _GCC_HOST_COMPILER_PATH,
     _GCC_HOST_COMPILER_PREFIX,
     "NEED_CUDA",
+    "NEED_ROCM",
     _CUDA_TOOLKIT_PATH,
     _CUDNN_INSTALL_PATH,
     _CUDA_VERSION,

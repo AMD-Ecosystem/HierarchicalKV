@@ -245,6 +245,15 @@ For Benchmark:
 ./benchmark_util
 ```
 
+### with bazel for AMD GPUs (ROCm)
+
+The `rocm` configuration builds the same targets with the ROCm clang. `ROCM_PATH` is the ROCm installation (default `/opt/rocm`) and `ROCM_AMDGPU_TARGETS` a comma-separated list of AMD GPU targets (default: the GPUs found by `offload-arch`).
+```shell
+git clone https://github.com/NVIDIA-Merlin/HierarchicalKV.git
+cd HierarchicalKV
+ROCM_PATH=/opt/rocm ROCM_AMDGPU_TARGETS=gfx942 bazel build --config=rocm //...
+```
+
 
 ## Benchmark & Performance(W.I.P)
 

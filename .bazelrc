@@ -21,3 +21,9 @@ build:cuda --action_env CUDA_VERSION="11"
 build:cuda --action_env CUDNN_VERSION="8"
 build:cuda --action_env CUDNN_INSTALL_PATH="/usr/"
 build:cuda --action_env CUDA_COMPUTE_CAPABILITIES="7.5"
+
+# This config refers to building HIP kernels for AMD GPUs with ROCm.
+build:rocm --crosstool_top=@local_config_rocm//crosstool:toolchain
+build:rocm --action_env NEED_ROCM=1
+build:rocm --action_env ROCM_PATH
+build:rocm --action_env ROCM_AMDGPU_TARGETS
