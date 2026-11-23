@@ -28,6 +28,7 @@ cuda_cc_library(
         "flexible_buffer.cuh",
         "group_lock.cuh",
         "memory_pool.cuh",
+        "multi_vector.hpp",
         "optimizers.cuh",
     ],
     visibility = [
