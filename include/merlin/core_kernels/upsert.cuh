@@ -177,6 +177,16 @@ __global__ void tlp_v1_upsert_kernel_with_io(
         for (int j = 0; j < Load_LEN_S; j += 1) {
           S temp_score = temp_scores[j];
           if (min_pos < 0 || temp_score < min_score) {
+            if (kRetryLockedAtCaller) {
+              // Skip slots that another thread holds, as the other insert
+              // kernels do; see kRetryLockedAtCaller.
+              const K verify_key = BUCKET::keys(bucket_keys_ptr, i + k + j)
+                                       ->load(cuda::std::memory_order_relaxed);
+              if (verify_key == static_cast<K>(LOCKED_KEY) ||
+                  verify_key == static_cast<K>(EMPTY_KEY)) {
+                continue;
+              }
+            }
             min_score = temp_score;
             min_pos = i + k + j;
           }
@@ -189,6 +199,7 @@ __global__ void tlp_v1_upsert_kernel_with_io(
       occupy_result = OccupyResult::REFUSED;
       break;
     }
+    if (kRetryLockedAtCaller && min_pos < 0) continue;
     auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos);
     auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
     if (expected_key != static_cast<K>(LOCKED_KEY) &&
