@@ -1734,7 +1734,12 @@ __global__ void upsert_and_evict_kernel_with_io_core(
             key_pos, src_lane, bucket_max_size);
       }
       occupy_result = g.shfl(occupy_result, src_lane);
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
 
     if (occupy_result == OccupyResult::REFUSED) {
       if (g.thread_rank() == 0) {

@@ -703,7 +703,12 @@ __global__ void update_score_kernel(const Table<K, V, S>* __restrict table,
         bucket->keys(key_pos)->store(update_key,
                                      cuda::std::memory_order_release);
       }
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
   }
 }
 

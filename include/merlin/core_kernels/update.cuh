@@ -834,7 +834,12 @@ __global__ void update_kernel_with_io(
         (bucket->keys(key_pos))
             ->store(update_key, cuda::std::memory_order_release);
       }
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
   }
 }
 
@@ -1036,7 +1041,12 @@ __global__ void update_kernel(const Table<K, V, S>* __restrict table,
         (bucket->keys(key_pos))
             ->store(update_key, cuda::std::memory_order_relaxed);
       }
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
   }
 }
 
@@ -1094,7 +1104,12 @@ __global__ void prepare_cpu_update_kernel(
       } else if (result == OccupyResult::REFUSED && g.thread_rank() == 0) {
         state[i] = 2;
       }
-    } while (result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && result == OccupyResult::CONTINUE);
+    if (result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      i -= blockDim.x * gridDim.x / TILE_SIZE;
+      continue;
+    }
   }
 }
 

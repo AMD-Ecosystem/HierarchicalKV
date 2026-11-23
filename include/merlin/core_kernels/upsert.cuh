@@ -1347,7 +1347,12 @@ __global__ void upsert_kernel_with_io_core(
       if (src_lane >= 0) {
         occupy_result = g.shfl(occupy_result, src_lane);
       }
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
 
     if (occupy_result == OccupyResult::REFUSED) {
       continue;
@@ -1712,7 +1717,12 @@ __global__ void upsert_kernel(const Table<K, V, S>* __restrict table,
       }
 
       occupy_result = g.shfl(occupy_result, src_lane);
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
 
     if (occupy_result == OccupyResult::REFUSED) continue;
 

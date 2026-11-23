@@ -35,6 +35,20 @@ namespace cg = cooperative_groups;
 namespace nv {
 namespace merlin {
 
+// When a tile finds a slot locked by another tile, return CONTINUE and retry
+// the key from the top of the caller's grid-stride loop instead of retrying in
+// an inner loop. The tiles of a HIP wavefront run in lockstep, and lanes that
+// leave a loop wait at its exit for the rest of the wavefront. A tile that
+// retries in an inner loop, while the holder of the slot is another tile of
+// the same wavefront waiting at that exit (or whose critical section the
+// compiler has moved there), would spin forever. Retrying through the
+// grid-stride loop lets every tile finish its critical section first.
+#ifdef MERLIN_HIP
+constexpr bool kRetryLockedAtCaller = true;
+#else
+constexpr bool kRetryLockedAtCaller = false;
+#endif
+
 // Vector Type of digests for memory access.
 using VecD_Load = byte16;
 // Vector Type of digests for computation.
@@ -854,7 +868,10 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
         return OccupyResult::DUPLICATE;
       }
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
-      if (vote) continue;
+      if (vote) {
+        if (kRetryLockedAtCaller) return OccupyResult::CONTINUE;
+        continue;
+      }
       vote = g.ballot(expected_key == static_cast<K>(EMPTY_KEY));
       if (vote) break;
     } while (vote != 0);
@@ -989,6 +1006,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
         return OccupyResult::DUPLICATE;
       }
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
+      if (kRetryLockedAtCaller && vote) return OccupyResult::CONTINUE;
     } while (vote != 0);
   }
 
@@ -999,14 +1017,23 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     // Step 2: record min score location.
     temp_min_score_val =
         bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
+    bool locked = false;
     if (temp_min_score_val < local_min_score_val) {
-      while ((expected_key = bucket->keys(key_pos)->load(LOCK_MEM_ORDER)) ==
-             static_cast<K>(LOCKED_KEY)) {
-      };
-      local_min_score_key = expected_key;
-      local_min_score_val = temp_min_score_val;
-      local_min_score_pos = key_pos;
+      if (kRetryLockedAtCaller) {
+        expected_key = bucket->keys(key_pos)->load(LOCK_MEM_ORDER);
+        locked = expected_key == static_cast<K>(LOCKED_KEY);
+      } else {
+        while ((expected_key = bucket->keys(key_pos)->load(LOCK_MEM_ORDER)) ==
+               static_cast<K>(LOCKED_KEY)) {
+        };
+      }
+      if (!locked) {
+        local_min_score_key = expected_key;
+        local_min_score_val = temp_min_score_val;
+        local_min_score_pos = key_pos;
+      }
     }
+    if (kRetryLockedAtCaller && g.any(locked)) return OccupyResult::CONTINUE;
   }
 
   // Step 3: insert by evicting some one.
@@ -1080,6 +1107,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_for_update(
       vote = g.ballot(expected_key == static_cast<K>(EMPTY_KEY));
       if (vote) return OccupyResult::REFUSED;
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
+      if (kRetryLockedAtCaller && vote) return OccupyResult::CONTINUE;
     } while (vote != 0);
   }
   return OccupyResult::REFUSED;

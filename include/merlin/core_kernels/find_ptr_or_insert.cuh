@@ -310,7 +310,12 @@ __global__ void find_ptr_or_insert_kernel(
       }
 
       occupy_result = g.shfl(occupy_result, src_lane);
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
 
     if ((occupy_result == OccupyResult::OCCUPIED_EMPTY ||
          occupy_result == OccupyResult::OCCUPIED_RECLAIMED) &&

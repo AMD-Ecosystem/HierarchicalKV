@@ -820,7 +820,12 @@ __global__ void update_values_kernel_with_io(
         (bucket->keys(key_pos))
             ->store(update_key, cuda::std::memory_order_release);
       }
-    } while (occupy_result == OccupyResult::CONTINUE);
+    } while (!kRetryLockedAtCaller && occupy_result == OccupyResult::CONTINUE);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
   }
 }
 
@@ -992,6 +997,11 @@ __global__ void update_values_kernel(const Table<K, V, S>* __restrict table,
     }
     occupy_result = find_and_lock_for_update<K, V, S, TILE_SIZE>(
         g, bucket, update_key, start_idx, key_pos, src_lane, bucket_max_size);
+    if (occupy_result == OccupyResult::CONTINUE) {
+      // Retry this key; see kRetryLockedAtCaller.
+      t -= blockDim.x * gridDim.x;
+      continue;
+    }
 
     occupy_result = g.shfl(occupy_result, src_lane);
 
