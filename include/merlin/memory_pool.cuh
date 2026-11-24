@@ -346,6 +346,11 @@ class MemoryPool final {
 
     // Preallocate pending.
     pending_.reserve(options_.max_pending);
+
+#ifdef MERLIN_HIP
+    CUDA_CHECK(
+        cudaStreamCreateWithFlags(&event_stream_, cudaStreamNonBlocking));
+#endif
   }
 
   ~MemoryPool() {
@@ -359,6 +364,10 @@ class MemoryPool final {
 
     // Any remaining buffers need to be properly unallocated.
     deplete_stock();
+
+#ifdef MERLIN_HIP
+    CUDA_CHECK(cudaStreamDestroy(event_stream_));
+#endif
   }
 
   inline size_t buffer_size() const { return buffer_size_; }
@@ -567,6 +576,15 @@ class MemoryPool final {
         cudaEvent_t ready_event{ready_events_.back()};
         ready_events_.pop_back();
         CUDA_CHECK(cudaEventRecord(ready_event, stream));
+#ifdef MERLIN_HIP
+        // HIP's event query reads the stream an event was last recorded on,
+        // even after that stream is destroyed (ROCm/rocm-systems#14755).
+        // Move the event onto a stream the pool owns, ordered after the
+        // caller's work. Remove once the minimum supported ROCm contains
+        // the fix, ROCm/rocm-systems#15025.
+        CUDA_CHECK(cudaStreamWaitEvent(event_stream_, ready_event, 0));
+        CUDA_CHECK(cudaEventRecord(ready_event, event_stream_));
+#endif
         pending_.emplace_back(*first, allocation_size, ready_event);
       }
     } else {
@@ -598,6 +616,9 @@ class MemoryPool final {
 
   std::vector<std::tuple<alloc_type*, size_t, cudaEvent_t>> pending_;
   BaseAllocator* allocator_;
+#ifdef MERLIN_HIP
+  cudaStream_t event_stream_{nullptr};
+#endif
 };
 
 template <class Allocator>
