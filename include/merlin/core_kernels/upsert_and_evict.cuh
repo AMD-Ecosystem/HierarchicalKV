@@ -148,6 +148,11 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
       }
     }
   }
+  // Under HIP each thread publishes in the pass in which it takes a slot, and
+  // the eviction loop ends for the whole wavefront at once, so a thread never
+  // waits on a slot held by a thread of its own wavefront that has left the
+  // loop; see kRetryLockedAtCaller.
+  bool published = false;
   do {
     if (occupy_result == OccupyResult::INITIAL) {
       do {
@@ -182,17 +187,6 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
             for (int j = 0; j < Load_LEN_S; j += 1) {
               S temp_score = temp_scores[j];
               if (temp_score < min_score) {
-                if (kRetryLockedAtCaller) {
-                  // Skip slots that another thread holds, as the other insert
-                  // kernels do; see kRetryLockedAtCaller.
-                  const K verify_key =
-                      BUCKET::keys(bucket_keys_ptr, i + k + j)
-                          ->load(cuda::std::memory_order_relaxed);
-                  if (verify_key == static_cast<K>(LOCKED_KEY) ||
-                      verify_key == static_cast<K>(EMPTY_KEY)) {
-                    continue;
-                  }
-                }
                 min_score = temp_score;
                 min_pos = i + k + j;
               }
@@ -207,7 +201,6 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
                                 score);
           break;
         }
-        if (kRetryLockedAtCaller && min_pos < 0) continue;
         auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos);
         auto expected_key =
             min_score_key->load(cuda::std::memory_order_relaxed);
@@ -248,6 +241,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
       } while (false);
     }
     if (occupy_result == OccupyResult::INITIAL) continue;
+    if (kRetryLockedAtCaller && published) continue;
     VecV* bucket_value_ptr = bucket_values_ptr + key_pos * dim;
     const VecV* param_value_ptr = values + kv_idx * dim;
     VecV* evicted_value_ptr = evicted_values + evict_idx * dim;
@@ -264,7 +258,9 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
     } else {
       CopyValue::ldg_stg(0, evicted_value_ptr, param_value_ptr, dim);
     }
-  } while (occupy_result == OccupyResult::INITIAL);
+    published = true;
+  } while (kRetryLockedAtCaller ? warp_any(kFullWarpMask, !published)
+                                : occupy_result == OccupyResult::INITIAL);
 }
 
 // Use 1 thread to deal with a KV-pair, but use a threads group cto copy value.

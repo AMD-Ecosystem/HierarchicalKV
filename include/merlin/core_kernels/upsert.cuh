@@ -146,7 +146,31 @@ __global__ void tlp_v1_upsert_kernel_with_io(
       }
     }
   }
-  while (occupy_result == OccupyResult::INITIAL) {
+  auto publish = [&]() {
+    VecV* bucket_value_ptr = bucket_values_ptr + key_pos * dim;
+    const VecV* param_value_ptr = values + kv_idx * dim;
+
+    if (occupy_result != OccupyResult::REFUSED) {
+      CopyValue::ldg_stg(0, bucket_value_ptr, param_value_ptr, dim);
+      auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+      // memory_order_release:
+      // Modifications to the bucket will not after this instruction.
+      key_address->store(key, cuda::std::memory_order_release);
+    }
+  };
+  // Under HIP each thread publishes in the pass in which it takes a slot, and
+  // the eviction loop ends for the whole wavefront at once, so a thread never
+  // waits on a slot held by a thread of its own wavefront that has left the
+  // loop; see kRetryLockedAtCaller.
+  bool published = false;
+  if (kRetryLockedAtCaller && occupy_result != OccupyResult::INITIAL) {
+    publish();
+    published = true;
+  }
+  while (kRetryLockedAtCaller
+             ? warp_any(kFullWarpMask, occupy_result == OccupyResult::INITIAL)
+             : occupy_result == OccupyResult::INITIAL) {
+    if (occupy_result != OccupyResult::INITIAL) continue;
     S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
     S min_score = static_cast<S>(MAX_SCORE);
     int min_pos = -1;
@@ -177,16 +201,6 @@ __global__ void tlp_v1_upsert_kernel_with_io(
         for (int j = 0; j < Load_LEN_S; j += 1) {
           S temp_score = temp_scores[j];
           if (min_pos < 0 || temp_score < min_score) {
-            if (kRetryLockedAtCaller) {
-              // Skip slots that another thread holds, as the other insert
-              // kernels do; see kRetryLockedAtCaller.
-              const K verify_key = BUCKET::keys(bucket_keys_ptr, i + k + j)
-                                       ->load(cuda::std::memory_order_relaxed);
-              if (verify_key == static_cast<K>(LOCKED_KEY) ||
-                  verify_key == static_cast<K>(EMPTY_KEY)) {
-                continue;
-              }
-            }
             min_score = temp_score;
             min_pos = i + k + j;
           }
@@ -199,7 +213,6 @@ __global__ void tlp_v1_upsert_kernel_with_io(
       occupy_result = OccupyResult::REFUSED;
       break;
     }
-    if (kRetryLockedAtCaller && min_pos < 0) continue;
     auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos);
     auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
     if (expected_key != static_cast<K>(LOCKED_KEY) &&
@@ -231,17 +244,12 @@ __global__ void tlp_v1_upsert_kernel_with_io(
         }
       }
     }
+    if (kRetryLockedAtCaller && occupy_result != OccupyResult::INITIAL) {
+      publish();
+      published = true;
+    }
   }
-  VecV* bucket_value_ptr = bucket_values_ptr + key_pos * dim;
-  const VecV* param_value_ptr = values + kv_idx * dim;
-
-  if (occupy_result != OccupyResult::REFUSED) {
-    CopyValue::ldg_stg(0, bucket_value_ptr, param_value_ptr, dim);
-    auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
-    // memory_order_release:
-    // Modifications to the bucket will not after this instruction.
-    key_address->store(key, cuda::std::memory_order_release);
-  }
+  if (!published) publish();
 }
 
 // Use 1 thread to deal with a KV-pair, including copying value.

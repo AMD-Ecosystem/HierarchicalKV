@@ -42,9 +42,10 @@ namespace merlin {
 // retries in an inner loop, while the holder of the slot is another tile of
 // the same wavefront waiting at that exit (or whose critical section the
 // compiler has moved there), would spin forever. Retrying through the
-// grid-stride loop lets every tile finish its critical section first. For the
-// same reason the thread-per-key insert kernels skip slots that another thread
-// holds when they choose an eviction victim.
+// grid-stride loop lets every tile finish its critical section first. The
+// thread-per-key (TLPv1) insert kernels have no grid-stride loop; there each
+// thread publishes in the pass in which it takes its slot, and the eviction
+// loop ends for the whole wavefront at once.
 #ifdef MERLIN_HIP
 constexpr bool kRetryLockedAtCaller = true;
 #else
