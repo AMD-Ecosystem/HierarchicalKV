@@ -13,7 +13,6 @@ def rocm_default_copts():
         "--rocm-path=%{rocm_path}",
         "-isystem",
         "%{rocm_path}/include/hipccl",
-        "-DUSE_HIP=1",
     ] + ["--offload-arch=" + target for target in rocm_amdgpu_targets()]
 
 def cuda_header_library(name,
