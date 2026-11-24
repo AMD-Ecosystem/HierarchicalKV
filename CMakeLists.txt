@@ -225,6 +225,11 @@ set_target_properties(correctness_stress_test PROPERTIES CUDA_ARCHITECTURES OFF)
 target_compile_definitions(correctness_stress_test PRIVATE HKV_ENABLE_P1_PARTITION_TESTS=1)
 TARGET_LINK_LIBRARIES(correctness_stress_test gtest_main)
 
+add_executable(repeated_key_test tests/repeated_key_test.cc.cu)
+target_compile_features(repeated_key_test PUBLIC cxx_std_14)
+set_target_properties(repeated_key_test PROPERTIES  CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(repeated_key_test gtest_main)
+
 add_executable(dual_bucket_benchmark benchmark/dual_bucket_benchmark.cc.cu)
 target_compile_features(dual_bucket_benchmark PUBLIC cxx_std_14)
 set_target_properties(dual_bucket_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
