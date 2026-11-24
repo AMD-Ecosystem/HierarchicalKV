@@ -523,13 +523,20 @@ __global__ void pipeline_update_score_kernel(
   g.sync();
   warp_sync(active_warp_mask);
 
-  while (retry_mask != 0) {
+  // With kRetryLockedAtCaller, a group takes, copies and releases a slot in
+  // one pass, keeps a key it could not take for the next pass, and the loop
+  // ends for the whole warp at once, so no group spins on a slot held by
+  // another group of its warp.
+  int pending_pos = -1;
+  while (kRetryLockedAtCaller ? warp_any(active_warp_mask, retry_mask != 0)
+                              : retry_mask != 0) {
+    if (kRetryLockedAtCaller && retry_mask == 0) continue;
     const int retry_index = __ffs(retry_mask) - 1;
     const int retry_key_idx = groupID * GROUP_SIZE + retry_index;
     const uint64_t retry_input_idx = key_idx_base + retry_index;
     const K retry_key = sm_target_keys[retry_key_idx];
     K* retry_keys_ptr = sm_keys_ptr[retry_key_idx];
-    int retry_pos = sm_position[retry_key_idx];
+    int retry_pos = pending_pos >= 0 ? pending_pos : sm_position[retry_key_idx];
     if (retry_pos < 0 && !IS_RESERVED_KEY<K>(retry_key)) {
       bool has_locked_keys = false;
       do {
@@ -549,7 +556,8 @@ __global__ void pipeline_update_score_kernel(
           retry_pos = g.shfl(possible_pos, __ffs(found_vote) - 1);
         }
         has_locked_keys = g.any(has_locked_keys);
-      } while (retry_pos < 0 && has_locked_keys);
+      } while (!kRetryLockedAtCaller && retry_pos < 0 && has_locked_keys);
+      if (kRetryLockedAtCaller && retry_pos < 0 && has_locked_keys) continue;
     }
     if (retry_pos < 0) {
       retry_mask &= retry_mask - 1;
@@ -565,7 +573,11 @@ __global__ void pipeline_update_score_kernel(
             cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
       }
       acquired = g.shfl(acquired, 0);
-    } while (acquired == 0);
+    } while (!kRetryLockedAtCaller && acquired == 0);
+    if (acquired == 0) {
+      pending_pos = retry_pos;
+      continue;
+    }
     if (rank == 0) {
       ScoreFunctor::update_without_missed(retry_keys_ptr, BUCKET_SIZE,
                                           retry_pos, scores, retry_input_idx,
@@ -574,6 +586,7 @@ __global__ void pipeline_update_score_kernel(
     }
     g.sync();
     retry_mask &= retry_mask - 1;
+    pending_pos = -1;
   }
 }  // End function
 
